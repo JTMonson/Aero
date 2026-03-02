@@ -1,43 +1,79 @@
+/*
+===============================================================================
+  Active Noise Control (FxLMS) - ESP32 (Arduino)
+
+  What this file does:
+    - Runs an FxLMS controller at a fixed sampling rate using an ESP32 hardware
+      timer interrupt as the sample “clock”.
+    - ISR (interrupt) only sets a flag.
+    - loop() does the heavy work once per tick: read ADCs, run FxLMS step,
+      write DAC, optionally print.
+
+  Key timing idea:
+    - ESP32 timer base clock: 80 MHz
+    - timerBegin(timer_number, prescaler, countUp)
+        * timer_number: which hardware timer to use (0..3 typically)
+        * prescaler: divides the 80 MHz timer clock
+        * countUp: true = count up, false = count down
+    - With prescaler = 80:
+        80 MHz / 80 = 1 MHz  →  1 tick = 1 microsecond (1 µs)
+
+  Setting the sample rate:
+    - timerAlarmWrite(timer, alarm_value_ticks, autoReload)
+        * alarm_value_ticks: how many timer ticks between interrupts
+        * autoReload: true = periodic, false = one-shot
+    - alarm_value_ticks = 1,000,000 / SAMPLE_RATE
+      Example: SAMPLE_RATE = 8000 Hz → 1,000,000 / 8000 = 125 µs per sample
+
+  Interrupt behavior:
+    - The timer hardware interrupts the CPU every alarm period.
+    - timerAttachInterrupt(timer, &onTimer, edge)
+      attaches your ISR (onTimer) to the timer event.
+    - Keep ISR short: no Serial, no heavy DSP.
+
+===============================================================================
+*/
+
 #include "control_filter.h"
 #include <Arduino.h>
 using namespace std;
 
 // ======== Constants ========
-#define REF_MIC_PIN  34    // ADC pin for reference mic
-#define ERR_MIC_PIN  35    // ADC pin for error mic
-#define DAC_SPKR_PIN 25    // DAC output pin for anti-noise speaker
+#define REF_MIC_PIN  34     // ADC pin for reference mic
+#define ERR_MIC_PIN  35     // ADC pin for error mic
+#define DAC_SPKR_PIN 25     // DAC output pin for anti-noise speaker
 
-#define SAMPLE_RATE 8000  // Hz
+#define SAMPLE_RATE 8000    // Hz
 
 // ======== Global Variables ========
-Control_filter ctrl;                                // FxLMS controller
+Control_filter ctrl;                                // FxLMS controller instance
 float sec_path[SEC_LEN] = {0.2f, 0.5f, 0.2f, 0.1f}; // Secondary path coefficients, fill with known path values
 
-hw_timer_t * timer = NULL;                          // Hardware timer for fixed sample rate
-volatile bool sampleReady = false;                  // Flag set by timer interrupt
+hw_timer_t *timer = NULL;           // ESP32 hardware timer handle pointer
+volatile bool sampleReady = false;  // Set by ISR, used in loop()
 
-// ======== Timer Interrupt ========
-// This runs at the precise sample rate (e.g., 8 kHz)
-// Just sets a flag for the main loop to process the next sample
+// ======== Timer ISR Interrupt ========
+// Runs at SAMPLE_RATE, only signals main loop
 void IRAM_ATTR onTimer() {
-    sampleReady = true;
+    sampleReady = true;     // Signal to process one sample
 }
 
 // ======== Process One Sample ========
 // This function shifts the delay lines, updates FxLMS, and returns outputs
 void processSample(float x_ref, float d_measured, float &y_out, float &e_out) {
-    // --- Shift the reference delay line x(n) ---
-    for(int i = FILTER_LEN-1; i>0; i--)
+    // Shift the reference delay line x(n)
+    for(int i = FILTER_LEN-1; i>0; i--) {
         ctrl.Xn[i] = ctrl.Xn[i-1];
+    }
     ctrl.Xn[0] = x_ref;       // newest sample from reference mic
 
-    // --- Set the desired signal at error mic ---
+    // Set the desired / measured signal at error mic
     ctrl.Dn = d_measured;
 
-    // --- Run one FxLMS step ---
+    // Run one FxLMS update step 
     ctrl.step();
 
-    // --- Outputs ---
+    // Outputs
     y_out = ctrl.Yn;      // Anti-noise output to DAC
     e_out = ctrl.En;      // Error signal for monitoring
 }
@@ -46,19 +82,27 @@ void processSample(float x_ref, float d_measured, float &y_out, float &e_out) {
 void setup() {
     Serial.begin(115200);  // Serial monitor for debugging
     
-    // --- Initialize secondary path (known or measured beforehand) ---
+    // Load known secondary path model into controller
     for(int i = 0; i < SEC_LEN; i++)
         ctrl.Sn[i] = sec_path[i];
 
-    // --- Setup hardware timer for fixed sample rate (SAMPLE_RATE Hz) ---
-    timer = timerBegin(0, 80, true);                        // Timer 0, prescaler 80 → 1 MHz tick
-    timerAttachInterrupt(timer, &onTimer, true);            // Attach ISR
-    timerAlarmWrite(timer, 1000000 / SAMPLE_RATE, true);    // Trigger at SAMPLE_RATE
+    // --- Setup hardware timer for fixed sample rate ---
+    
+    // Configure timer: 80 MHz / 80 prescaler = 1 MHz -> 1 microsecond per tick
+    timer = timerBegin(0, 80, true);
+
+    // Call onTimer() whenever the timer alarm fires
+    timerAttachInterrupt(timer, &onTimer, true);
+
+    // Fire every (1e6 / SAMPLE_RATE) ticks (microseconds)
+    timerAlarmWrite(timer, 1000000UL / SAMPLE_RATE, true);
+
+    // Start the sampling timer
     timerAlarmEnable(timer);
 }
 
 void loop() {
-    // Only process a sample when the timer sets the flag
+    // Check if the timer interrupt has signaled
     if(sampleReady) {
         sampleReady = false;
 
@@ -72,11 +116,20 @@ void loop() {
 
         // --- Output anti-noise to speaker via DAC ---
         // Scale yOut (assumed 0..1) to DAC 0..255
-        dacWrite(DAC_SPKR_PIN, int(yOut * 255));
+        // Clamp output to DAC range (0..1)
+        if (yOut < 0.0f) yOut = 0.0f;
+        if (yOut > 1.0f) yOut = 1.0f;
+        
+        // Scale to 8-bit DAC (0..255)
+        dacWrite(DAC_SPKR_PIN, (uint8_t)(yOut * 255));
 
-        // --- Optional: monitor signals on Serial ---
-        Serial.print("Ref: "); Serial.print(refSample, 4);
-        Serial.print("\tAntiNoise: "); Serial.print(yOut, 4);
-        Serial.print("\tError: "); Serial.println(eOut, 4);
+        // Debug printing, disable once verified working
+        static int counter = 0;
+        if (++counter >= 100) {   // print every 100 samples
+            counter = 0;
+            Serial.print("Ref: "); Serial.print(refSample, 4);
+            Serial.print("\tAntiNoise: "); Serial.print(yOut, 4);
+            Serial.print("\tError: "); Serial.println(eOut, 4);
+        }
     }
 }

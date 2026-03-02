@@ -3,7 +3,7 @@
 #include <cmath>
 #include "control_filter.h"
 
-#define NUM_SAMPLES 100
+#define NUM_SAMPLES 500
 
 using namespace std;
 
