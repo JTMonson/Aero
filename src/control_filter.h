@@ -4,7 +4,7 @@
 
 #define FILTER_LEN 4    // Adaptive filter length
 #define SEC_LEN 4       // Secondary path length
-#define MU 0.006f            // Step size
+#define MU 0.0001f            // Step size
 
 /*
     w(n+1) = w(n) - mu * e(n) * xf(n)

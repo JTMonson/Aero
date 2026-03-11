@@ -19,7 +19,7 @@ int main() {
     // ===== 2. Generate reference signal (the noise we want to cancel) =====
     float reference[NUM_SAMPLES];
     for (int n = 0; n < NUM_SAMPLES; n++)
-        reference[n] = sin(2.0f * 3.14159f * n / 20.0f) * 10.0f; // make bigger for testing
+        reference[n] = sin(2.0f * 3.14159f * n / 20.0f) * 100.0f; // make bigger for testing
 
     // ===== 3. Print table header =====
     cout << left; // left-align headers
