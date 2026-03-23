@@ -31,6 +31,8 @@
       attaches your ISR (onTimer) to the timer event.
     - Keep ISR short: no Serial, no heavy DSP.
 
+  pio run --target upload
+
 ===============================================================================
 */
 
