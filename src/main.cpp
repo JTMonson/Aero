@@ -45,11 +45,11 @@ using namespace std;
 #define ERR_MIC_PIN  35     // ADC pin for error mic
 #define DAC_SPKR_PIN 25     // DAC output pin for anti-noise speaker
 
-#define SAMPLE_RATE 8000    // Hz
+#define SAMPLE_RATE 20000   // Hz
 
 // ======== Global Variables ========
 Control_filter ctrl;                                // FxLMS controller instance
-float sec_path[SEC_LEN] = {0.2f, 0.5f, 0.2f, 0.1f}; // Secondary path coefficients, fill with known path values
+float sec_path[SEC_LEN] = {1.0f, 1.0f, 1.0f, 1.0f}; // Secondary path coefficients, fill with known path values
 
 hw_timer_t *timer = NULL;           // ESP32 hardware timer handle pointer
 volatile bool sampleReady = false;  // Set by ISR, used in loop()

@@ -5,7 +5,7 @@
 
 float sineFreq = 1518.0f;       // Hz
 float sinePhase = 0.0f;
-const float TWO_PI = 6.28318530718f;
+const float TWOPI = 6.28318530718f;
 
 hw_timer_t *timer = NULL;
 volatile bool sampleReady = false;
@@ -44,12 +44,12 @@ void loop() {
         // Advance the phase for the next sample
         // This determines the sine wave frequency
         // Formula: phase_step = 2π * frequency / sample_rate
-        sinePhase += TWO_PI * sineFreq / SAMPLE_RATE;
+        sinePhase += TWOPI * sineFreq / SAMPLE_RATE;
 
         // Wrap phase after one full sine cycle (2π)
         // Prevents the phase variable from growing forever
-        if (sinePhase >= TWO_PI) {
-            sinePhase -= TWO_PI;
+        if (sinePhase >= TWOPI) {
+            sinePhase -= TWOPI;
         }
 
         // Clamp the value to valid DAC range (safety)

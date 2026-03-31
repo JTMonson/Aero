@@ -4,11 +4,11 @@
 
 #define FILTER_LEN 4    // Adaptive filter length
 #define SEC_LEN 4       // Secondary path length
-#define MU 0.0001f            // Step size
+#define MU 0.0001f      // Step size
 
 /*
-    w(n+1) = w(n) - mu * e(n) * xf(n)
-    y(n) = sum( w(n) * x(n) )
+        w(n+1) = w(n) - mu * e(n) * xf(n)
+        y(n) = sum( w(n) * x(n) )
 */
 
 class Control_filter {
