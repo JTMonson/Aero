@@ -50,6 +50,14 @@ using namespace std;
 
 #define SAMPLE_RATE 20000   // Hz
 
+// ==== SD Card Pin Definitions ====
+#define CLK 14
+#define CMD 15
+#define D0 2
+#define D1 4
+#define D2 12
+#define D3 13
+
 // ======== Global Variables ========
 Control_filter ctrl;                                // FxLMS controller instance
 float sec_path[SEC_LEN] = {1.0f, 1.0f, 1.0f, 1.0f}; // Secondary path coefficients, fill with known path values
