@@ -38,6 +38,9 @@
 
 #include "control_filter.h"
 #include <Arduino.h>
+// SD card includes
+#include "FS.h"
+#include "SD_MMC.h"
 using namespace std;
 
 // ======== Constants ========
@@ -88,6 +91,23 @@ void setup() {
     for(int i = 0; i < SEC_LEN; i++)
         ctrl.Sn[i] = sec_path[i];
 
+  // --- SD Card Initialization ---
+  if (!SD_MMC.begin("/sdcard", true)) {
+    Serial.println("SD failed");
+    // Optionally, halt or retry
+  } else if (SD_MMC.cardType() == CARD_NONE) {
+    Serial.println("No SD card");
+  } else {
+    Serial.println("SD success");
+    // Write CSV header if file does not exist
+    if (!SD_MMC.exists("/data.csv")) {
+      File file = SD_MMC.open("/data.csv", FILE_WRITE);
+      if (file) {
+        file.println("millis,ref_mic,anti_noise,error_mic");
+        file.close();
+      }
+    }
+  }
     // --- Setup hardware timer for fixed sample rate ---
     
     // Configure timer: 80 MHz / 80 prescaler = 1 MHz -> 1 microsecond per tick
@@ -128,10 +148,26 @@ void loop() {
         // Debug printing, disable once verified working
         static int counter = 0;
         if (++counter >= 100) {   // print every 100 samples
-            counter = 0;
-            Serial.print("Ref: "); Serial.print(refSample, 4);
-            Serial.print("\tAntiNoise: "); Serial.print(yOut, 4);
-            Serial.print("\tError: "); Serial.println(eOut, 4);
+          counter = 0;
+          Serial.print("Ref: "); Serial.print(refSample, 4);
+          Serial.print("\tAntiNoise: "); Serial.print(yOut, 4);
+          Serial.print("\tError: "); Serial.println(eOut, 4);
+        }
+
+        // --- SD Card Logging ---
+        File file = SD_MMC.open("/data.csv", FILE_APPEND);
+        if (file) {
+          file.print(millis());
+          file.print(",");
+          file.print(refSample, 6);
+          file.print(",");
+          file.print(yOut, 6);
+          file.print(",");
+          file.println(eOut, 6);
+          file.close();
+        } else {
+          // Optionally print error
+          // Serial.println("SD write failed");
         }
     }
 }
